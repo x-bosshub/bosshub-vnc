@@ -126,10 +126,18 @@ def register_device(dev_id, mac_hex, ssh_port):
 def setup_heartbeat(dev_id):
     print("Installing Heartbeat Service...")
     script = f"""
-import time, json, urllib.request, subprocess, os 
+import time, json, urllib.request, subprocess, os ,uuid
+
+def get_serial_number():
+    try:
+        with open('/sys/firmware/devicetree/base/serial-number', 'r') as f:
+            serial_number = f.read().strip()
+            return str(serial_number.replace('\u0000',''))
+    except :
+        return str(uuid.uuid4())
 
 PING_URL = "{PING_URL}"
-DEV_ID = "{dev_id}"
+DEV_ID = get_serial_number()
 def get_info():
     try: t = round(int(open('/sys/class/thermal/thermal_zone0/temp').read())/1000,1)
     except: t=0
@@ -219,17 +227,20 @@ auth.token = "{AUTH_TOKEN}"
 [[proxies]]
 name = "term-{dev_id}"
 type = "http"
+localIP = "127.0.0.1"
 localPort = 7681
 customDomains = ["term-{dev_id}.{SERVER_ADDR}"]
 
 [[proxies]]
 name = "vnc-{dev_id}"
 type = "http"
+localIP = "127.0.0.1"
 localPort = 6080
 customDomains = ["vnc-{dev_id}.{SERVER_ADDR}"]
 
 [[proxies]]
 name = "web-{dev_id}"
+localIP = "127.0.0.1"
 type = "http"
 localPort = 5000
 customDomains = ["web-{dev_id}.{SERVER_ADDR}"]
@@ -245,12 +256,14 @@ customDomains = ["ssh-{dev_id}.{SERVER_ADDR}"]
 [[proxies]]
 name = "socket-{dev_id}"
 type = "http"
+localIP = "127.0.0.1"
 localPort = 8000
 customDomains = ["socket-{dev_id}.{SERVER_ADDR}"]
 
 [[proxies]]
 name = "app-{dev_id}"
 type = "http"
+localIP = "127.0.0.1"
 localPort = 9000
 customDomains = ["app-{dev_id}.{SERVER_ADDR}"]
 
@@ -318,6 +331,7 @@ create_services()
 # --- Summary Output ---
 claim_url = f"{WEB_BASE_URL}/claim/{dev_id}"
 web_app_url = f"https://term-{dev_id}.{SERVER_ADDR}/"
+web_vnc_url = f"https://vnc-{dev_id}.{SERVER_ADDR}/"
 
 print("\n" + "*" * 60)
 print("     OFFLINE INSTALLATION SUCCESSFUL ")
@@ -325,6 +339,7 @@ print("*" * 60)
 print(f"Device ID    : {dev_id}")
 print(f"SSH Port     : {ssh_port}")
 print(f"Web Terminal : {web_app_url}")
+print(f"Remote VNC : {web_vnc_url}")
 print(f"Management   : {claim_url}")
 print("-" * 60)
 print("ACTION REQUIRED: Add device using the link below:")
