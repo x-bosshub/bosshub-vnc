@@ -37,8 +37,12 @@ echo "[Account Configuration: Web Terminal & VNC]"
 echo "----------------------------------------"
 
 CURRENT_USER=${SUDO_USER:-$(whoami)}
+
+# รับค่า Username จากผู้ใช้งาน (ถ้ากด Enter ข้ามไป จะใช้ Current User เป็นค่าเริ่มต้น)
+read -p "Enter Web Terminal User (default: $CURRENT_USER): " INPUT_USER
 WEB_USER=${INPUT_USER:-$CURRENT_USER}
 
+# รับค่ารหัสผ่านจากผู้ใช้งาน (ถ้ากด Enter ข้ามไป จะใช้ 123456 เป็นค่าเริ่มต้น)
 read -p "Enter Web Terminal Password (default: 123456): " INPUT_PASS
 WEB_PASS=${INPUT_PASS:-123456}
 
