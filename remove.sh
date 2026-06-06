@@ -43,6 +43,10 @@ sudo apt-get clean
 cd ~
 rm -rf ~/bosshub-vnc
 
+sudo rm -rf /var/lib/apt/lists/*
+sudo apt-get clean
+sudo apt-get update
+
 echo "------------------------------------------------"
 echo "✅ ล้างบางระบบ BossHub VNC และ Tunnel ออกจากเครื่อง 100% เรียบร้อยครับบอส!"
 echo "------------------------------------------------"
