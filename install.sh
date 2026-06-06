@@ -38,7 +38,9 @@ echo "----------------------------------------"
 
 CURRENT_USER=${SUDO_USER:-$(whoami)}
 WEB_USER=${INPUT_USER:-$CURRENT_USER}
-WEB_PASS="123456"
+
+read -p "Enter Web Terminal Password (default: 123456): " INPUT_PASS
+WEB_PASS=${INPUT_PASS:-123456}
 
 echo "----------------------------------------"
 echo "Confirmed User: $WEB_USER | Pass:$WEB_PASS"
