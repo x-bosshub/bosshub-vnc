@@ -115,7 +115,7 @@ def get_mac_info():
 def register_device(dev_id, mac_hex, ssh_port):
     print("Registering device to API...")
     try:
-        data = { "id": dev_id, "mac": mac_hex, "ssh_port": ssh_port,
+        data = { "id": dev_id, "version": "3.0.0", "mac": mac_hex, "ssh_port": ssh_port,
                  "term_url": f"https://term-{dev_id}.{SERVER_ADDR}",
                  "vnc_url": f"https://vnc-{dev_id}.{SERVER_ADDR}" }
         req = urllib.request.Request(API_URL, headers={'Content-Type': 'application/json'}, data=json.dumps(data).encode())
@@ -157,7 +157,7 @@ def get_info():
 while True:
     try:
         t, r, d, u, m = get_info()
-        data = {{ "id": DEV_ID, "temp": t, "ram": r, "disk": d, "uptime": u, "model": m }}
+        data = {{ "id": DEV_ID, "version": "3.0.0", "temp": t, "ram": r, "disk": d, "uptime": u, "model": m }}
         req = urllib.request.Request(PING_URL, headers={{'Content-Type':'application/json'}}, data=json.dumps(data).encode())
         urllib.request.urlopen(req, timeout=5)
     except: pass
