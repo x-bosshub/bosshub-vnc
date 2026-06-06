@@ -19,7 +19,7 @@ import RFB from "../core/rfb.js";
 import WakeLockManager from './wakelock.js';
 import * as WebUtil from "./webutil.js";
 
-const PAGE_TITLE = "noVNC";
+const PAGE_TITLE = "BossHub";
 
 const LINGUAS = ["cs", "de", "el", "es", "fr", "hr", "hu", "it", "ja", "ko", "nl", "pl", "pt_BR", "ru", "sv", "tr", "uk", "zh_CN", "zh_TW"];
 
@@ -1277,7 +1277,7 @@ const UI = {
 
         UI.updateBeforeUnload();
 
-        document.title = PAGE_TITLE;
+        document.title = "BossHub VNC";
 
         UI.openControlbar();
         UI.openConnectPanel();
@@ -1898,7 +1898,7 @@ const UI = {
     updateDesktopName(e) {
         UI.desktopName = e.detail.name;
         // Display the desktop name in the document title
-        document.title = e.detail.name + " - " + PAGE_TITLE;
+        document.title = "BossHub VNC";
     },
 
     updateRequestWakelock() {
