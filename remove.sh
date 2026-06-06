@@ -36,7 +36,6 @@ sudo rm -f /usr/local/bin/ttyd
 
 # 5. ถอนการติดตั้งแพ็กเกจ WayVNC และเคลียร์ไฟล์ขยะในระบบ
 sudo apt-get remove --purge wayvnc -y
-sudo apt-get autoremove -y
 sudo apt-get clean
 
 # 6. ลบโฟลเดอร์ Repository ที่ Clone มาติดตั้ง
