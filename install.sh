@@ -100,7 +100,7 @@ def get_raspberry_pi_serial_number():
     try:
         with open('/sys/firmware/devicetree/base/serial-number', 'r') as f:
             serial_number = f.read().strip()
-            return serial_number.replace('\u0000','') 
+            return serial_number.replace(chr(0),'') 
     except :
         return str(uuid.uuid4())
 
@@ -132,7 +132,7 @@ def get_serial_number():
     try:
         with open('/sys/firmware/devicetree/base/serial-number', 'r') as f:
             serial_number = f.read().strip()
-            return str(serial_number.replace('\u0000',''))
+            return str(serial_number.replace(chr(0),''))
     except :
         return str(uuid.uuid4())
 
@@ -294,7 +294,7 @@ WantedBy=multi-user.target""")
         f.write("""[Unit]
 Description=BossHub VNC Remote
 [Service]
-ExecStart=/usr/share/novnc/utils/websockify/run --web=/usr/share/novnc 6080 127.0.0.1:5900 --heartbeat=30
+ExecStart=/usr/bin/python3 -m websockify --web=/usr/share/novnc 6080 127.0.0.1:5900 --heartbeat=30
 Restart=always
 User=root
 RestartSec=5
