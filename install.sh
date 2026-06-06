@@ -251,7 +251,6 @@ type = "tcp"
 localIP = "127.0.0.1"
 localPort = 22
 remotePort = {ssh_port}
-customDomains = ["ssh-{dev_id}.{SERVER_ADDR}"]
 
 [[proxies]]
 name = "socket-{dev_id}"
