@@ -71,7 +71,8 @@ fi
 echo "Installing System Dependencies (APT)..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y git python3-pip python3-numpy openssh-server wayvnc coreutils
+# **แก้ไข: เพิ่ม websockify เข้ามาใน apt-get เลย**
+apt-get install -y git python3-pip python3-numpy openssh-server wayvnc coreutils websockify
 
 echo "Enabling SSH Service..."
 sudo systemctl enable ssh
@@ -207,9 +208,6 @@ def install_tools():
     else:
         print(f"   [ERROR] Missing {novnc_src}. Please check your repository structure.")
 
-    if shutil.which("websockify") is None:
-        run("pip3 install websockify --break-system-packages", ignore_error=True)
-
 def setup_frp(dev_id, ssh_port):
     print("Configuring Tunnel Services...")
     
@@ -295,11 +293,13 @@ Environment=HOME={home_dir}
 [Install]
 WantedBy=multi-user.target""")
 
+    # **แก้ไข: ชี้เป้าไปที่ /usr/bin/websockify (ที่ติดตั้งผ่าน apt) ตรงๆ**
     with open("/etc/systemd/system/novnc.service", "w") as f:
-        f.write("""[Unit]
+        f.write(f"""[Unit]
 Description=BossHub VNC Remote
+After=network.target
 [Service]
-ExecStart=/usr/share/novnc/utils/websockify/run --web=/usr/share/novnc 6080 127.0.0.1:5900 --heartbeat=30
+ExecStart=/usr/bin/websockify --web=/usr/share/novnc 6080 127.0.0.1:5900 --heartbeat=30
 Restart=always
 User=root
 RestartSec=5
@@ -309,6 +309,7 @@ WantedBy=multi-user.target""")
     with open("/etc/systemd/system/frpc.service", "w") as f:
         f.write("""[Unit]
 Description=BossHub FRP Tunnel
+After=network.target
 [Service]
 ExecStart=/usr/local/bin/frpc -c /etc/frp/frpc.toml
 Restart=always
@@ -320,11 +321,26 @@ WantedBy=multi-user.target""")
 
 # --- EXECUTION FLOW ---
 try:
-    os.makedirs("/etc/wayvnc", exist_ok=True)
-    with open("/etc/wayvnc/config", "w") as f: 
+    print("Configuring Wayland VNC (wayvnc)...")
+    run("sudo raspi-config nonint do_vnc 0", ignore_error=True)
+    
+    home_dir = f"/home/{WEB_USER}" if WEB_USER != "root" else "/root"
+    wayvnc_dir = os.path.join(home_dir, ".config", "wayvnc")
+    os.makedirs(wayvnc_dir, exist_ok=True)
+    
+    with open(os.path.join(wayvnc_dir, "config"), "w") as f: 
         f.write("address=127.0.0.1\nenable_auth=false\n")
-    run("sudo systemctl restart wayvnc", ignore_error=True)
-except: pass
+        
+    run(f"chown -R {WEB_USER}:{WEB_USER} {wayvnc_dir}", ignore_error=True)
+    
+    user_uid_proc = subprocess.run(f"id -u {WEB_USER}", shell=True, capture_output=True, text=True)
+    user_uid = user_uid_proc.stdout.strip()
+    
+    if user_uid:
+        run(f"sudo -u {WEB_USER} XDG_RUNTIME_DIR=/run/user/{user_uid} systemctl --user daemon-reload", ignore_error=True)
+        run(f"sudo -u {WEB_USER} XDG_RUNTIME_DIR=/run/user/{user_uid} systemctl --user restart wayvnc", ignore_error=True)
+except Exception as e: 
+    print(f"   [WARNING] WayVNC Setup Error: {e}")
 
 install_tools()
 dev_id, ssh_port, mac_hex = get_mac_info()
@@ -344,7 +360,7 @@ print("*" * 60)
 print(f"Device ID    : {dev_id}")
 print(f"SSH Port     : {ssh_port}")
 print(f"Web Terminal : {web_app_url}")
-print(f"Remote VNC : {web_vnc_url}")
+print(f"Remote VNC   : {web_vnc_url}")
 print(f"Management   : {claim_url}")
 print("-" * 60)
 print("ACTION REQUIRED: Add device using the link below:")
