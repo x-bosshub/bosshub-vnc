@@ -299,7 +299,7 @@ WantedBy=multi-user.target""")
         f.write("""[Unit]
 Description=BossHub VNC Remote
 [Service]
-ExecStart=/usr/bin/python3 -m websockify --web=/usr/share/novnc 6080 127.0.0.1:5900 --heartbeat=30
+ExecStart=/usr/share/novnc/utils/websockify/run --web=/usr/share/novnc 6080 127.0.0.1:5900 --heartbeat=30
 Restart=always
 User=root
 RestartSec=5
