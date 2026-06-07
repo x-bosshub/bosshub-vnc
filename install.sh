@@ -29,7 +29,6 @@ echo -e "\033[0m"
 
 if [ "$EUID" -ne 0 ]; then echo "Error: Please run as root"; exit; fi
 
-# เก็บ Path ปัจจุบันที่กำลังรันสคริปต์ไว้ เพื่อให้ Python รู้ว่าต้องไปก๊อปปี้ไฟล์จากตรงไหน
 export BH_BASE_DIR="$(pwd)"
 
 # --- 1. Account Configuration ---
@@ -38,11 +37,9 @@ echo "----------------------------------------"
 
 CURRENT_USER=${SUDO_USER:-$(whoami)}
 
-# รับค่า Username จากผู้ใช้งาน (ถ้ากด Enter ข้ามไป จะใช้ Current User เป็นค่าเริ่มต้น)
 read -p "Enter Web Terminal User (default: $CURRENT_USER): " INPUT_USER
 WEB_USER=${INPUT_USER:-$CURRENT_USER}
 
-# รับค่ารหัสผ่านจากผู้ใช้งาน (ถ้ากด Enter ข้ามไป จะใช้ 123456 เป็นค่าเริ่มต้น)
 read -p "Enter Web Terminal Password (default: 123456): " INPUT_PASS
 WEB_PASS=${INPUT_PASS:-123456}
 
@@ -55,10 +52,22 @@ echo "Initializing System & Cleaning up..."
 sudo systemctl stop ttyd novnc frpc bosshub-heartbeat wayvnc 2>/dev/null
 killall -9 ttyd frpc websockify 2>/dev/null
 
+# === ล้างซาก websockify ที่มาจาก pip อย่างปลอดภัย (ไม่ลบไฟล์ในระบบหลักตรงๆ) ===
+pip3 uninstall -y websockify --break-system-packages 2>/dev/null
+rm -f /usr/local/bin/websockify /home/$WEB_USER/.local/bin/websockify 2>/dev/null
+rm -rf /usr/local/lib/python3.*/dist-packages/websockify* 2>/dev/null
+rm -rf /home/$WEB_USER/.local/lib/python3.*/site-packages/websockify* 2>/dev/null
+
 # Release APT locks
 sudo systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null
 killall -9 apt apt-get dpkg 2>/dev/null
 rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock* 2>/dev/null
+
+# === ใช้คำสั่ง Purge เพื่อเคลียร์ประวัติและโครงสร้างเก่าใน apt (ถ้ามี) ให้เริ่มจากศูนย์อย่างสะอาด ===
+# ท่านี้จะปลอดภัยทั้งการลงครั้งแรก (จะข้ามไปเงียบๆ) และการลงซ้ำ (จะล้างระบบให้พร้อมลงใหม่)
+export DEBIAN_FRONTEND=noninteractive
+apt-get purge -y websockify 2>/dev/null
+apt-get autoremove -y 2>/dev/null
 
 # Hardware specific: HDMI Config
 if [ -f /boot/firmware/cmdline.txt ]; then
@@ -69,9 +78,8 @@ if [ -f /boot/firmware/cmdline.txt ]; then
 fi
 
 echo "Installing System Dependencies (APT)..."
-export DEBIAN_FRONTEND=noninteractive
 apt-get update
-# **แก้ไข: เพิ่ม websockify เข้ามาใน apt-get เลย**
+# ติดตั้งแพ็กเกจหลักทั้งหมด รวมถึง websockify ใหม่จาก Repository หลักของระบบอย่างถูกต้อง
 apt-get install -y git python3-pip python3-numpy openssh-server wayvnc coreutils websockify
 
 echo "Enabling SSH Service..."
@@ -93,7 +101,7 @@ WEB_PASS = os.environ.get("BH_INSTALL_PASS")
 THEME_BG = os.environ.get("BH_THEME_BG")
 THEME_FG = os.environ.get("BH_THEME_FG")
 THEME_CURSOR = os.environ.get("BH_THEME_CURSOR")
-BASE_DIR = os.environ.get("BH_BASE_DIR") # รับค่าโฟลเดอร์ปัจจุบันของ GitHub Repo
+BASE_DIR = os.environ.get("BH_BASE_DIR") 
 
 def run(cmd, ignore_error=False):
     print(f"   [EXEC] {cmd[:60]}...")
@@ -186,7 +194,6 @@ WantedBy=multi-user.target""")
 def install_tools():
     print("Installing Core Components from Local Repo...")
     
-    # 1. ติดตั้ง TTYD จากโฟลเดอร์ bin ใน Repo
     ttyd_src = os.path.join(BASE_DIR, "bin", "ttyd")
     ttyd_dest = "/usr/local/bin/ttyd"
     if os.path.exists(ttyd_src):
@@ -197,7 +204,6 @@ def install_tools():
     else:
         print(f"   [ERROR] Missing {ttyd_src}. Please check your repository structure.")
         
-    # 2. ติดตั้ง noVNC จากโฟลเดอร์ novnc ใน Repo
     novnc_src = os.path.join(BASE_DIR, "novnc")
     novnc_dest = "/usr/share/novnc"
     if os.path.exists(novnc_src):
@@ -211,7 +217,6 @@ def install_tools():
 def setup_frp(dev_id, ssh_port):
     print("Configuring Tunnel Services...")
     
-    # ติดตั้ง FRP จากโฟลเดอร์ bin ใน Repo
     frpc_src = os.path.join(BASE_DIR, "bin", "frpc")
     frpc_dest = "/usr/local/bin/frpc"
     if os.path.exists(frpc_src):
@@ -293,7 +298,7 @@ Environment=HOME={home_dir}
 [Install]
 WantedBy=multi-user.target""")
 
-    # **แก้ไข: ชี้เป้าไปที่ /usr/bin/websockify (ที่ติดตั้งผ่าน apt) ตรงๆ**
+    # เรียกใช้ผ่าน Path มาตรฐานเด็ดขาด /usr/bin/websockify มั่นใจได้ว่ามีไฟล์แน่นอนหลังจากผ่านลอจิกด้านบน
     with open("/etc/systemd/system/novnc.service", "w") as f:
         f.write(f"""[Unit]
 Description=BossHub VNC Remote
@@ -359,8 +364,11 @@ print("     OFFLINE INSTALLATION SUCCESSFUL ")
 print("*" * 60)
 print(f"Device ID    : {dev_id}")
 print(f"SSH Port     : {ssh_port}")
+print("-" * 20)
 print(f"Web Terminal : {web_app_url}")
+print("-" * 20)
 print(f"Remote VNC   : {web_vnc_url}")
+print("-" * 20)
 print(f"Management   : {claim_url}")
 print("-" * 60)
 print("ACTION REQUIRED: Add device using the link below:")
