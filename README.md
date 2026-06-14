@@ -2,6 +2,15 @@
 # Raspberry Pi/ Linux
 ดาวห์โหลดและติดตั้ง
 ```
+# เปิดใช้งาน VNC (0 = เปิด, 1 = ปิด)
+sudo raspi-config nonint do_vnc 0
+
+# เปิดใช้งาน I2C (0 = เปิด, 1 = ปิด)
+sudo raspi-config nonint do_i2c 0
+
+# เปิดใช้งาน SPI (0 = เปิด, 1 = ปิด)
+sudo raspi-config nonint do_spi 0
+
 cd ~
 sudo rm -f -r ~/bosshub-vnc
 git clone https://github.com/x-bosshub/bosshub-vnc.git ~/bosshub-vnc
