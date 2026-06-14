@@ -29,7 +29,8 @@ echo -e "\033[0m"
 
 if [ "$EUID" -ne 0 ]; then echo "Error: Please run as root"; exit; fi
 
-export BH_BASE_DIR="$(pwd)"
+# แก้ไขสิทธิ์การดึงโฟลเดอร์หลักให้ล็อกเป้าไปยังตำแหน่งโฟลเดอร์ที่สคริปต์นี้ตั้งอยู่จริง
+export BH_BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- 1. Account Configuration ---
 echo "[Account Configuration: Web Terminal & VNC]"
@@ -79,8 +80,8 @@ fi
 
 echo "Installing System Dependencies (APT)..."
 apt-get update
-# ติดตั้งแพ็กเกจหลักทั้งหมด รวมถึง websockify ใหม่จาก Repository หลักของระบบอย่างถูกต้อง
-apt-get install -y git python3-pip python3-numpy openssh-server wayvnc coreutils websockify
+# เพิ่มแพ็กเกจ novnc เข้าไปในรายการติดตั้งหลักของระบบร่วมกับตัวอื่นอย่างถูกต้อง
+apt-get install -y git python3-pip python3-numpy openssh-server wayvnc coreutils websockify novnc
 
 echo "Enabling SSH Service..."
 sudo systemctl enable ssh
