@@ -29,6 +29,16 @@ echo "----------------------------------------"
 CURRENT_USER=${SUDO_USER:-$(whoami)}
 WEB_USER=${INPUT_USER:-$CURRENT_USER}
 WEB_PASS="123456"
+
+# ตรวจสอบว่ามี User หรือยัง ถ้ายังไม่มีให้สร้าง ถ้ามีแล้วให้อัปเดต Password ทับเสมอ
+if ! id "$WEB_USER" &>/dev/null; then
+    echo "Creating user $WEB_USER..."
+    useradd -m -s /bin/bash "$WEB_USER"
+else
+    echo "User $WEB_USER already exists. Updating configuration..."
+fi
+# Force update password ทุกครั้งที่รันสคริปต์
+echo "$WEB_USER:$WEB_PASS" | chpasswd
  
 echo "----------------------------------------"
 echo "Confirmed User: $WEB_USER | Pass:$WEB_PASS"
@@ -49,7 +59,8 @@ fi
 echo "Installing Dependencies..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
-apt-get install -y git python3-pip python3-numpy wget curl sed openssh-server
+# เพิ่มการติดตั้ง wayvnc
+apt-get install -y git python3-pip python3-numpy wget curl sed openssh-server wayvnc
 
 echo "Enabling SSH Service..."
 sudo systemctl enable ssh
@@ -103,6 +114,14 @@ def register_device(dev_id, mac_hex, ssh_port):
         print("Registration Successful")
     except Exception as e: print(f"API Warning: {e}")
 
+def stop_existing_services():
+    print("Stopping existing services for safe update...")
+    # หยุดและ disable service เดิมทั้งหมดเพื่อการติดตั้งทับ
+    run("sudo systemctl stop ttyd.service novnc.service frpc.service bosshub-heartbeat.service", ignore_error=True)
+    run("sudo systemctl disable ttyd.service novnc.service frpc.service bosshub-heartbeat.service", ignore_error=True)
+    # ลบไฟล์ script และ binary เก่าออก
+    run("rm -f /usr/local/bin/bosshub-heartbeat.py /usr/local/bin/ttyd /usr/local/bin/frpc", ignore_error=True)
+
 def setup_heartbeat(dev_id):
     print("Installing Heartbeat Service...")
     script = f"""
@@ -151,15 +170,16 @@ WantedBy=multi-user.target""")
 
 def install_tools():
     print("Downloading Core Components...")
-    if not os.path.exists("/usr/local/bin/ttyd"):
-        run("wget -4 -qO /tmp/ttyd https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.aarch64")
-        run("mv /tmp/ttyd /usr/local/bin/ttyd && chmod +x /usr/local/bin/ttyd")
-    if not os.path.exists("/usr/share/novnc"):
-        run("git clone https://github.com/novnc/noVNC.git /usr/share/novnc")
-        run("git clone https://github.com/novnc/websockify.git /usr/share/novnc/utils/websockify")
-        run("ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html")
-    if shutil.which("websockify") is None:
-        run("pip3 install websockify --break-system-packages", ignore_error=True)
+    
+    # Download ttyd
+    run("wget -4 -qO /tmp/ttyd https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.aarch64")
+    run("mv -f /tmp/ttyd /usr/local/bin/ttyd && chmod +x /usr/local/bin/ttyd")
+    
+    # Download noVNC & websockify
+    run("rm -rf /usr/share/novnc", ignore_error=True)
+    run("git clone https://github.com/novnc/noVNC.git /usr/share/novnc")
+    run("git clone https://github.com/novnc/websockify.git /usr/share/novnc/utils/websockify")
+    run("ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html")
 
 def setup_frp(dev_id, ssh_port):
     print("Configuring Tunnel Services...")
@@ -168,11 +188,12 @@ def setup_frp(dev_id, ssh_port):
     frp_ver = "0.69.1"
     frp_arch = "arm64" if "aarch64" in arch or "arm" in arch else "amd64"
     
-    if not os.path.exists("/usr/local/bin/frpc"):
-        url = f"https://github.com/fatedier/frp/releases/download/v{frp_ver}/frp_{frp_ver}_linux_{frp_arch}.tar.gz"
-        run(f"wget -4 -O /tmp/frp.tar.gz {url}")
-        run(f"tar -xzf /tmp/frp.tar.gz -C /tmp")
-        run(f"mv /tmp/frp_{frp_ver}_linux_{frp_arch}/frpc /usr/local/bin/frpc && chmod +x /usr/local/bin/frpc")
+    # Download and configure frpc
+    url = f"https://github.com/fatedier/frp/releases/download/v{frp_ver}/frp_{frp_ver}_linux_{frp_arch}.tar.gz"
+    run(f"wget -4 -qO /tmp/frp.tar.gz {url}")
+    run(f"tar -xzf /tmp/frp.tar.gz -C /tmp")
+    run(f"mv -f /tmp/frp_{frp_ver}_linux_{frp_arch}/frpc /usr/local/bin/frpc && chmod +x /usr/local/bin/frpc")
+    run(f"rm -rf /tmp/frp_{frp_ver}_linux_{frp_arch} /tmp/frp.tar.gz", ignore_error=True)
     
     config = f"""
 serverAddr = "{SERVER_ADDR}"
@@ -203,7 +224,7 @@ name = "ssh-{dev_id}"
 type = "tcp"
 localIP = "127.0.0.1"
 localPort = 22
-remotePort = 22
+remotePort = {ssh_port}
 customDomains = ["ssh-{dev_id}.{SERVER_ADDR}"]
 
 [[proxies]]
@@ -225,7 +246,7 @@ customDomains = ["app-{dev_id}.{SERVER_ADDR}"]
 
     run("mkdir -p /etc/frp")
     with open("/tmp/frpc.toml", "w") as f: f.write(config)
-    run("mv /tmp/frpc.toml /etc/frp/frpc.toml")
+    run("mv -f /tmp/frpc.toml /etc/frp/frpc.toml")
 
 def create_services():
     print("Integrating Systemd Services...")
@@ -275,12 +296,13 @@ WantedBy=multi-user.target""")
     run("sudo systemctl enable ttyd.service novnc.service frpc.service bosshub-heartbeat.service")
 
 try:
-    if os.path.exists("/etc/wayvnc/config"):
+    if os.path.exists("/etc/wayvnc/config") or shutil.which("wayvnc"):
         run("mkdir -p /etc/wayvnc", ignore_error=True)
         with open("/etc/wayvnc/config", "w") as f: f.write("address=127.0.0.1\nenable_auth=false\n")
         run("sudo systemctl restart wayvnc", ignore_error=True)
 except: pass
 
+stop_existing_services()
 install_tools()
 dev_id, ssh_port, mac_hex = get_mac_info()
 register_device(dev_id, mac_hex, ssh_port)
