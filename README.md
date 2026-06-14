@@ -18,7 +18,7 @@ git clone https://github.com/x-bosshub/bosshub-vnc.git ~/bosshub-vnc
 chmod +x ~/bosshub-vnc/install.sh
 sudo bash ~/bosshub-vnc/install.sh
 
-sudo reboot
+#sudo reboot
 ```
 # ลบการติเตั่ง
 ```
