@@ -29,7 +29,6 @@ echo -e "\033[0m"
 
 if [ "$EUID" -ne 0 ]; then echo "Error: Please run as root"; exit; fi
 
-# แก้ไขสิทธิ์การดึงโฟลเดอร์หลักให้ล็อกเป้าไปยังตำแหน่งโฟลเดอร์ที่สคริปต์นี้ตั้งอยู่จริง
 export BH_BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- 1. Account Configuration ---
@@ -37,11 +36,7 @@ echo "[Account Configuration: Web Terminal & VNC]"
 echo "----------------------------------------"
 
 CURRENT_USER=${SUDO_USER:-$(whoami)}
-
-#read -p "Enter Web Terminal User (default: $CURRENT_USER): " INPUT_USER
 WEB_USER=$CURRENT_USER
-
-#read -p "Enter Web Terminal Password (default: 123456): " INPUT_PASS
 WEB_PASS="123456"
 
 echo "----------------------------------------"
@@ -53,24 +48,19 @@ echo "Initializing System & Cleaning up..."
 sudo systemctl stop ttyd novnc frpc bosshub-heartbeat wayvnc 2>/dev/null
 killall -9 ttyd frpc websockify 2>/dev/null
 
-# === ล้างซาก websockify ที่มาจาก pip อย่างปลอดภัย (ไม่ลบไฟล์ในระบบหลักตรงๆ) ===
 pip3 uninstall -y websockify --break-system-packages 2>/dev/null
 rm -f /usr/local/bin/websockify /home/$WEB_USER/.local/bin/websockify 2>/dev/null
 rm -rf /usr/local/lib/python3.*/dist-packages/websockify* 2>/dev/null
 rm -rf /home/$WEB_USER/.local/lib/python3.*/site-packages/websockify* 2>/dev/null
 
-# Release APT locks
 sudo systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null
 killall -9 apt apt-get dpkg 2>/dev/null
 rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock* 2>/dev/null
 
-# === ใช้คำสั่ง Purge เพื่อเคลียร์ประวัติและโครงสร้างเก่าใน apt (ถ้ามี) ให้เริ่มจากศูนย์อย่างสะอาด ===
-# ท่านี้จะปลอดภัยทั้งการลงครั้งแรก (จะข้ามไปเงียบๆ) และการลงซ้ำ (จะล้างระบบให้พร้อมลงใหม่)
 export DEBIAN_FRONTEND=noninteractive
 apt-get purge -y websockify 2>/dev/null
 apt-get autoremove -y 2>/dev/null
 
-# Hardware specific: HDMI Config
 if [ -f /boot/firmware/cmdline.txt ]; then
     if ! grep -q "video=HDMI-A-2" /boot/firmware/cmdline.txt; then
         echo "Configuring HDMI Output..."
@@ -80,7 +70,6 @@ fi
 
 echo "Installing System Dependencies (APT)..."
 apt-get update
-# เพิ่มแพ็กเกจ novnc เข้าไปในรายการติดตั้งหลักของระบบร่วมกับตัวอื่นอย่างถูกต้อง
 apt-get install -y git python3-pip python3-numpy openssh-server wayvnc coreutils websockify novnc
 
 echo "Enabling SSH Service..."
@@ -203,7 +192,7 @@ def install_tools():
         os.chmod(ttyd_dest, 0o755)
         print("   [SUCCESS] Copied local ttyd.")
     else:
-        print(f"   [ERROR] Missing {ttyd_src}. Please check your repository structure.")
+        print(f"   [ERROR] Missing {ttyd_src}.")
         
     novnc_src = os.path.join(BASE_DIR, "novnc")
     novnc_dest = "/usr/share/novnc"
@@ -213,9 +202,8 @@ def install_tools():
         run("ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html")
         print("   [SUCCESS] Copied local noVNC.")
     else:
-        print(f"   [ERROR] Missing {novnc_src}. Please check your repository structure.")
+        print(f"   [ERROR] Missing {novnc_src}.")
         
-    # --- แทรก Offline Websockify ---
     websockify_src = os.path.join(BASE_DIR, "websockify")
     websockify_dest = "/usr/share/novnc/utils/websockify"
     if os.path.exists(websockify_src):
@@ -223,7 +211,7 @@ def install_tools():
         shutil.copytree(websockify_src, websockify_dest)
         print("   [SUCCESS] Copied local websockify.")
     else:
-        print(f"   [INFO] Offline websockify not found in {websockify_src}. System will fallback to APT version.")
+        print(f"   [INFO] Offline websockify not found. Fallback to APT.")
 
 def setup_frp(dev_id, ssh_port):
     print("Configuring Tunnel Services...")
@@ -236,7 +224,7 @@ def setup_frp(dev_id, ssh_port):
         os.chmod(frpc_dest, 0o755)
         print("   [SUCCESS] Copied local frpc.")
     else:
-        print(f"   [ERROR] Missing {frpc_src}. Please check your repository structure.")
+        print(f"   [ERROR] Missing {frpc_src}.")
     
     config = f"""
 serverAddr = "{SERVER_ADDR}"
@@ -309,7 +297,6 @@ Environment=HOME={home_dir}
 [Install]
 WantedBy=multi-user.target""")
 
-    # เรียกใช้ผ่าน Offline ถ้ามี หากไม่มีจะใช้ Path มาตรฐาน /usr/bin/websockify
     with open("/etc/systemd/system/novnc.service", "w") as f:
         f.write(f"""[Unit]
 Description=BossHub VNC Remote
@@ -335,26 +322,27 @@ WantedBy=multi-user.target""")
     run("sudo systemctl daemon-reload")
     run("sudo systemctl enable ttyd novnc frpc bosshub-heartbeat", ignore_error=True)
 
-# --- EXECUTION FLOW ---
 try:
     print("Configuring Wayland VNC (wayvnc)...")
     run("sudo raspi-config nonint do_vnc 0", ignore_error=True)
     
+    # 1. Config System-wide (อิงจากโค้ดเก่าที่ทำงานได้)
+    run("sudo mkdir -p /etc/wayvnc", ignore_error=True)
+    with open("/tmp/wayvnc_sys_config", "w") as f: 
+        f.write("address=127.0.0.1\nenable_auth=false\n")
+    run("sudo mv /tmp/wayvnc_sys_config /etc/wayvnc/config")
+    
+    # 2. Config User-level (เพื่อความชัวร์ 100%)
     home_dir = f"/home/{WEB_USER}" if WEB_USER != "root" else "/root"
     wayvnc_dir = os.path.join(home_dir, ".config", "wayvnc")
-    os.makedirs(wayvnc_dir, exist_ok=True)
-    
-    with open(os.path.join(wayvnc_dir, "config"), "w") as f: 
+    run(f"sudo -u {WEB_USER} mkdir -p {wayvnc_dir}", ignore_error=True)
+    with open("/tmp/wayvnc_user_config", "w") as f: 
         f.write("address=127.0.0.1\nenable_auth=false\n")
-        
-    run(f"chown -R {WEB_USER}:{WEB_USER} {wayvnc_dir}", ignore_error=True)
+    run(f"sudo mv /tmp/wayvnc_user_config {wayvnc_dir}/config")
+    run(f"sudo chown -R {WEB_USER}:{WEB_USER} {wayvnc_dir}", ignore_error=True)
     
-    user_uid_proc = subprocess.run(f"id -u {WEB_USER}", shell=True, capture_output=True, text=True)
-    user_uid = user_uid_proc.stdout.strip()
-    
-    if user_uid:
-        run(f"sudo -u {WEB_USER} XDG_RUNTIME_DIR=/run/user/{user_uid} systemctl --user daemon-reload", ignore_error=True)
-        run(f"sudo -u {WEB_USER} XDG_RUNTIME_DIR=/run/user/{user_uid} systemctl --user restart wayvnc", ignore_error=True)
+    # สั่ง kill เพื่อให้ระบบ Desktop (Wayfire) สร้าง Process ขึ้นมาใหม่พร้อมอ่านค่า Config ทันที
+    run("sudo killall wayvnc", ignore_error=True)
 except Exception as e: 
     print(f"   [WARNING] WayVNC Setup Error: {e}")
 
@@ -365,7 +353,6 @@ setup_frp(dev_id, ssh_port)
 setup_heartbeat(dev_id)
 create_services()
 
-# --- Summary Output ---
 claim_url = f"{WEB_BASE_URL}/claim/{dev_id}"
 web_app_url = f"https://term-{dev_id}.{SERVER_ADDR}/"
 web_vnc_url = f"https://vnc-{dev_id}.{SERVER_ADDR}/"
@@ -387,7 +374,6 @@ print(f"URL: \033[1;33m{claim_url}\033[0m")
 print("-" * 60)
 sys.stdout.flush()
 
-# --- Service Finalization ---
 print("\n" + "="*50)
 print("Services will restart in 3 seconds.")
 try:
