@@ -1,4 +1,9 @@
 #!/bin/bash
+# =======================================================
+#  BossHub Installer (v3.0 - Self-Contained / Offline Edition)
+#  - No external downloads during installation (except apt)
+#  - Copies pre-packaged binaries directly from the repo
+# =======================================================
 
 SERVER_ADDR="shell.bosshub.io"
 SERVER_PORT=7000
@@ -7,12 +12,13 @@ PING_URL="http://141.98.19.190:4000/api/ping"
 WEB_BASE_URL="https://dev.bosshub.io"
 AUTH_TOKEN="BossHub_Secret_Key_2025"
 
+# --- THEME CONFIG ---
 THEME_BG="#0b0c15"
 THEME_FG="#00f2fe"
 THEME_CURSOR="#ff0076"
 
 echo -e "\033[1;36m"
-echo " BossHub Installer "
+echo " BossHub Offline Installer "
 echo "   ___               _   _       _      "
 echo "  / __\ ___  ___ ___| |_| |_   _| |__   "
 echo " /__\/// _ \/ __/ __/  __ | | | | '_ \  "
@@ -23,32 +29,47 @@ echo -e "\033[0m"
 
 if [ "$EUID" -ne 0 ]; then echo "Error: Please run as root"; exit; fi
 
+export BH_BASE_DIR="$(pwd)"
+
+# --- 1. Account Configuration ---
 echo "[Account Configuration: Web Terminal & VNC]"
 echo "----------------------------------------"
 
 CURRENT_USER=${SUDO_USER:-$(whoami)}
-WEB_USER=${INPUT_USER:-$CURRENT_USER}
-WEB_PASS="123456"
 
-# ตรวจสอบว่ามี User หรือยัง ถ้ายังไม่มีให้สร้าง ถ้ามีแล้วให้อัปเดต Password ทับเสมอ
-if ! id "$WEB_USER" &>/dev/null; then
-    echo "Creating user $WEB_USER..."
-    useradd -m -s /bin/bash "$WEB_USER"
-else
-    echo "User $WEB_USER already exists. Updating configuration..."
-fi
-# Force update password ทุกครั้งที่รันสคริปต์
-echo "$WEB_USER:$WEB_PASS" | chpasswd
- 
+read -p "Enter Web Terminal User (default: $CURRENT_USER): " INPUT_USER
+WEB_USER=${INPUT_USER:-$CURRENT_USER}
+
+read -p "Enter Web Terminal Password (default: 123456): " INPUT_PASS
+WEB_PASS=${INPUT_PASS:-123456}
+
 echo "----------------------------------------"
 echo "Confirmed User: $WEB_USER | Pass:$WEB_PASS"
 echo "----------------------------------------"
-echo "Initializing System..."
+echo "Initializing System & Cleaning up..."
 
+# Force Kill specific services
+sudo systemctl stop ttyd novnc frpc bosshub-heartbeat wayvnc 2>/dev/null
+killall -9 ttyd frpc websockify 2>/dev/null
+
+# === ล้างซาก websockify ที่มาจาก pip อย่างปลอดภัย (ไม่ลบไฟล์ในระบบหลักตรงๆ) ===
+pip3 uninstall -y websockify --break-system-packages 2>/dev/null
+rm -f /usr/local/bin/websockify /home/$WEB_USER/.local/bin/websockify 2>/dev/null
+rm -rf /usr/local/lib/python3.*/dist-packages/websockify* 2>/dev/null
+rm -rf /home/$WEB_USER/.local/lib/python3.*/site-packages/websockify* 2>/dev/null
+
+# Release APT locks
 sudo systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null
-killall apt apt-get 2>/dev/null
-rm /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock* 2>/dev/null
+killall -9 apt apt-get dpkg 2>/dev/null
+rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock* 2>/dev/null
 
+# === ใช้คำสั่ง Purge เพื่อเคลียร์ประวัติและโครงสร้างเก่าใน apt (ถ้ามี) ให้เริ่มจากศูนย์อย่างสะอาด ===
+# ท่านี้จะปลอดภัยทั้งการลงครั้งแรก (จะข้ามไปเงียบๆ) และการลงซ้ำ (จะล้างระบบให้พร้อมลงใหม่)
+export DEBIAN_FRONTEND=noninteractive
+apt-get purge -y websockify 2>/dev/null
+apt-get autoremove -y 2>/dev/null
+
+# Hardware specific: HDMI Config
 if [ -f /boot/firmware/cmdline.txt ]; then
     if ! grep -q "video=HDMI-A-2" /boot/firmware/cmdline.txt; then
         echo "Configuring HDMI Output..."
@@ -56,28 +77,31 @@ if [ -f /boot/firmware/cmdline.txt ]; then
     fi
 fi
 
-echo "Installing Dependencies..."
-export DEBIAN_FRONTEND=noninteractive
+echo "Installing System Dependencies (APT)..."
 apt-get update
-# เพิ่มการติดตั้ง wayvnc
-apt-get install -y git python3-pip python3-numpy wget curl sed openssh-server wayvnc
+# ติดตั้งแพ็กเกจหลักทั้งหมด รวมถึง websockify ใหม่จาก Repository หลักของระบบอย่างถูกต้อง
+apt-get install -y git python3-pip python3-numpy openssh-server wayvnc coreutils websockify
 
 echo "Enabling SSH Service..."
 sudo systemctl enable ssh
 sudo systemctl start ssh
 
-cat << EOF > /tmp/setup_logic.py
+# --- 2. Generate Python Deployment Script ---
+cat << 'EOF' > /tmp/setup_logic.py
 import os, subprocess, uuid, sys, shutil, json, urllib.request, time
 
-SERVER_ADDR = "$SERVER_ADDR"
-SERVER_PORT = $SERVER_PORT
-API_URL = "$API_URL"
-PING_URL = "$PING_URL"
-WEB_BASE_URL = "$WEB_BASE_URL"
-AUTH_TOKEN = "$AUTH_TOKEN"
-
-WEB_USER = "$WEB_USER"
-WEB_PASS = "$WEB_PASS"
+SERVER_ADDR = os.environ.get("BH_SERVER_ADDR")
+SERVER_PORT = int(os.environ.get("BH_SERVER_PORT"))
+API_URL = os.environ.get("BH_API_URL")
+PING_URL = os.environ.get("BH_PING_URL")
+WEB_BASE_URL = os.environ.get("BH_WEB_BASE_URL")
+AUTH_TOKEN = os.environ.get("BH_AUTH_TOKEN")
+WEB_USER = os.environ.get("BH_INSTALL_USER")
+WEB_PASS = os.environ.get("BH_INSTALL_PASS")
+THEME_BG = os.environ.get("BH_THEME_BG")
+THEME_FG = os.environ.get("BH_THEME_FG")
+THEME_CURSOR = os.environ.get("BH_THEME_CURSOR")
+BASE_DIR = os.environ.get("BH_BASE_DIR") 
 
 def run(cmd, ignore_error=False):
     print(f"   [EXEC] {cmd[:60]}...")
@@ -91,8 +115,8 @@ def get_raspberry_pi_serial_number():
     try:
         with open('/sys/firmware/devicetree/base/serial-number', 'r') as f:
             serial_number = f.read().strip()
-            return serial_number.replace('\u0000','') 
-    except:
+            return serial_number.replace(chr(0),'') 
+    except :
         return str(uuid.uuid4())
 
 def get_mac_info():
@@ -106,7 +130,7 @@ def get_mac_info():
 def register_device(dev_id, mac_hex, ssh_port):
     print("Registering device to API...")
     try:
-        data = { "id": dev_id, "mac": mac_hex, "ssh_port": ssh_port,
+        data = { "id": dev_id, "version": "3.0.0", "mac": mac_hex, "ssh_port": ssh_port,
                  "term_url": f"https://term-{dev_id}.{SERVER_ADDR}",
                  "vnc_url": f"https://vnc-{dev_id}.{SERVER_ADDR}" }
         req = urllib.request.Request(API_URL, headers={'Content-Type': 'application/json'}, data=json.dumps(data).encode())
@@ -114,21 +138,21 @@ def register_device(dev_id, mac_hex, ssh_port):
         print("Registration Successful")
     except Exception as e: print(f"API Warning: {e}")
 
-def stop_existing_services():
-    print("Stopping existing services for safe update...")
-    # หยุดและ disable service เดิมทั้งหมดเพื่อการติดตั้งทับ
-    run("sudo systemctl stop ttyd.service novnc.service frpc.service bosshub-heartbeat.service", ignore_error=True)
-    run("sudo systemctl disable ttyd.service novnc.service frpc.service bosshub-heartbeat.service", ignore_error=True)
-    # ลบไฟล์ script และ binary เก่าออก
-    run("rm -f /usr/local/bin/bosshub-heartbeat.py /usr/local/bin/ttyd /usr/local/bin/frpc", ignore_error=True)
-
 def setup_heartbeat(dev_id):
     print("Installing Heartbeat Service...")
     script = f"""
-import time, json, urllib.request, subprocess, os 
+import time, json, urllib.request, subprocess, os ,uuid
+
+def get_serial_number():
+    try:
+        with open('/sys/firmware/devicetree/base/serial-number', 'r') as f:
+            serial_number = f.read().strip()
+            return str(serial_number.replace(chr(0),''))
+    except :
+        return str(uuid.uuid4())
 
 PING_URL = "{PING_URL}"
-DEV_ID = "{dev_id}"
+DEV_ID = get_serial_number()
 def get_info():
     try: t = round(int(open('/sys/class/thermal/thermal_zone0/temp').read())/1000,1)
     except: t=0
@@ -143,12 +167,12 @@ def get_info():
     try: up = f"{{round(float(open('/proc/uptime').read().split()[0])/3600,1)}}h"
     except: up="N/A"
     try: mod = open('/sys/firmware/devicetree/base/model').read().replace(chr(0),'').strip()
-    except: mod="RPi"
+    except: mod="LINUX/RPI"
     return t, ram, disk, up, mod
 while True:
     try:
         t, r, d, u, m = get_info()
-        data = {{ "id": DEV_ID, "temp": t, "ram": r, "disk": d, "uptime": u, "model": "PI5" }}
+        data = {{ "id": DEV_ID, "version": "3.0.0", "temp": t, "ram": r, "disk": d, "uptime": u, "model": m }}
         req = urllib.request.Request(PING_URL, headers={{'Content-Type':'application/json'}}, data=json.dumps(data).encode())
         urllib.request.urlopen(req, timeout=5)
     except: pass
@@ -158,8 +182,7 @@ while True:
     with open("/etc/systemd/system/bosshub-heartbeat.service", "w") as f:
         f.write(f"""[Unit]
 Description=BossHub Monitor
-After=network.target network-online.target
-Wants=network-online.target
+After=network.target
 [Service]
 ExecStart=/usr/bin/python3 /usr/local/bin/bosshub-heartbeat.py
 Restart=always
@@ -169,31 +192,40 @@ RestartSec=5
 WantedBy=multi-user.target""")
 
 def install_tools():
-    print("Downloading Core Components...")
+    print("Installing Core Components from Local Repo...")
     
-    # Download ttyd
-    run("wget -4 -qO /tmp/ttyd https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.aarch64")
-    run("mv -f /tmp/ttyd /usr/local/bin/ttyd && chmod +x /usr/local/bin/ttyd")
-    
-    # Download noVNC & websockify
-    run("rm -rf /usr/share/novnc", ignore_error=True)
-    run("git clone https://github.com/novnc/noVNC.git /usr/share/novnc")
-    run("git clone https://github.com/novnc/websockify.git /usr/share/novnc/utils/websockify")
-    run("ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html")
+    ttyd_src = os.path.join(BASE_DIR, "bin", "ttyd")
+    ttyd_dest = "/usr/local/bin/ttyd"
+    if os.path.exists(ttyd_src):
+        if os.path.exists(ttyd_dest): os.remove(ttyd_dest)
+        shutil.copy(ttyd_src, ttyd_dest)
+        os.chmod(ttyd_dest, 0o755)
+        print("   [SUCCESS] Copied local ttyd.")
+    else:
+        print(f"   [ERROR] Missing {ttyd_src}. Please check your repository structure.")
+        
+    novnc_src = os.path.join(BASE_DIR, "novnc")
+    novnc_dest = "/usr/share/novnc"
+    if os.path.exists(novnc_src):
+        if os.path.exists(novnc_dest): shutil.rmtree(novnc_dest, ignore_errors=True)
+        shutil.copytree(novnc_src, novnc_dest)
+        run("ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html")
+        print("   [SUCCESS] Copied local noVNC.")
+    else:
+        print(f"   [ERROR] Missing {novnc_src}. Please check your repository structure.")
 
 def setup_frp(dev_id, ssh_port):
     print("Configuring Tunnel Services...")
-    arch = subprocess.check_output("uname -m", shell=True).decode().strip()
     
-    frp_ver = "0.69.1"
-    frp_arch = "arm64" if "aarch64" in arch or "arm" in arch else "amd64"
-    
-    # Download and configure frpc
-    url = f"https://github.com/fatedier/frp/releases/download/v{frp_ver}/frp_{frp_ver}_linux_{frp_arch}.tar.gz"
-    run(f"wget -4 -qO /tmp/frp.tar.gz {url}")
-    run(f"tar -xzf /tmp/frp.tar.gz -C /tmp")
-    run(f"mv -f /tmp/frp_{frp_ver}_linux_{frp_arch}/frpc /usr/local/bin/frpc && chmod +x /usr/local/bin/frpc")
-    run(f"rm -rf /tmp/frp_{frp_ver}_linux_{frp_arch} /tmp/frp.tar.gz", ignore_error=True)
+    frpc_src = os.path.join(BASE_DIR, "bin", "frpc")
+    frpc_dest = "/usr/local/bin/frpc"
+    if os.path.exists(frpc_src):
+        if os.path.exists(frpc_dest): os.remove(frpc_dest)
+        shutil.copy(frpc_src, frpc_dest)
+        os.chmod(frpc_dest, 0o755)
+        print("   [SUCCESS] Copied local frpc.")
+    else:
+        print(f"   [ERROR] Missing {frpc_src}. Please check your repository structure.")
     
     config = f"""
 serverAddr = "{SERVER_ADDR}"
@@ -204,17 +236,20 @@ auth.token = "{AUTH_TOKEN}"
 [[proxies]]
 name = "term-{dev_id}"
 type = "http"
+localIP = "127.0.0.1"
 localPort = 7681
 customDomains = ["term-{dev_id}.{SERVER_ADDR}"]
 
 [[proxies]]
 name = "vnc-{dev_id}"
 type = "http"
+localIP = "127.0.0.1"
 localPort = 6080
 customDomains = ["vnc-{dev_id}.{SERVER_ADDR}"]
 
 [[proxies]]
 name = "web-{dev_id}"
+localIP = "127.0.0.1"
 type = "http"
 localPort = 5000
 customDomains = ["web-{dev_id}.{SERVER_ADDR}"]
@@ -225,55 +260,51 @@ type = "tcp"
 localIP = "127.0.0.1"
 localPort = 22
 remotePort = {ssh_port}
-customDomains = ["ssh-{dev_id}.{SERVER_ADDR}"]
 
 [[proxies]]
 name = "socket-{dev_id}"
 type = "http"
 localIP = "127.0.0.1"
 localPort = 8000
-remotePort = 8000
 customDomains = ["socket-{dev_id}.{SERVER_ADDR}"]
 
 [[proxies]]
 name = "app-{dev_id}"
-type = "tcp"
+type = "http"
 localIP = "127.0.0.1"
 localPort = 9000
-remotePort = 9000
 customDomains = ["app-{dev_id}.{SERVER_ADDR}"]
-"""
 
+"""
     run("mkdir -p /etc/frp")
-    with open("/tmp/frpc.toml", "w") as f: f.write(config)
-    run("mv -f /tmp/frpc.toml /etc/frp/frpc.toml")
+    with open("/etc/frp/frpc.toml", "w") as f: f.write(config)
 
 def create_services():
     print("Integrating Systemd Services...")
-    theme_json = '{"background": "$THEME_BG", "foreground": "$THEME_FG", "cursor": "$THEME_CURSOR"}'
+    theme_json = f'{{"background": "{THEME_BG}", "foreground": "{THEME_FG}", "cursor": "{THEME_CURSOR}"}}'
+    home_dir = f"/home/{WEB_USER}" if WEB_USER != "root" else "/root"
     
     with open("/etc/systemd/system/ttyd.service", "w") as f:
         f.write(f"""[Unit]
 Description=BossHub Web Terminal
-After=network.target network-online.target
-Wants=network-online.target
+After=network.target
 [Service]
-ExecStart=/usr/local/bin/ttyd -p 7681 -W -t theme='{theme_json}' /bin/bash
+ExecStart=/usr/local/bin/ttyd -p 7681 -c {WEB_USER}:{WEB_PASS} -W -t theme='{theme_json}' /bin/bash
 Restart=always
 User={WEB_USER}
 RestartSec=5
-WorkingDirectory=/home/{WEB_USER}
-Environment=HOME=/home/{WEB_USER}
+WorkingDirectory={home_dir}
+Environment=HOME={home_dir}
 [Install]
 WantedBy=multi-user.target""")
 
+    # เรียกใช้ผ่าน Path มาตรฐานเด็ดขาด /usr/bin/websockify มั่นใจได้ว่ามีไฟล์แน่นอนหลังจากผ่านลอจิกด้านบน
     with open("/etc/systemd/system/novnc.service", "w") as f:
-        f.write("""[Unit]
+        f.write(f"""[Unit]
 Description=BossHub VNC Remote
-After=network.target network-online.target
-Wants=network-online.target
+After=network.target
 [Service]
-ExecStart=/usr/share/novnc/utils/websockify/run --web=/usr/share/novnc 6080 127.0.0.1:5900 --heartbeat=30
+ExecStart=/usr/bin/websockify --web=/usr/share/novnc 6080 127.0.0.1:5900 --heartbeat=30
 Restart=always
 User=root
 RestartSec=5
@@ -283,26 +314,39 @@ WantedBy=multi-user.target""")
     with open("/etc/systemd/system/frpc.service", "w") as f:
         f.write("""[Unit]
 Description=BossHub FRP Tunnel
-After=network.target network-online.target
-Wants=network-online.target
+After=network.target
 [Service]
 ExecStart=/usr/local/bin/frpc -c /etc/frp/frpc.toml
 Restart=always
-RestartSec=10
+RestartSec=5
 [Install]
 WantedBy=multi-user.target""")
-    
     run("sudo systemctl daemon-reload")
-    run("sudo systemctl enable ttyd.service novnc.service frpc.service bosshub-heartbeat.service")
+    run("sudo systemctl enable ttyd novnc frpc bosshub-heartbeat", ignore_error=True)
 
+# --- EXECUTION FLOW ---
 try:
-    if os.path.exists("/etc/wayvnc/config") or shutil.which("wayvnc"):
-        run("mkdir -p /etc/wayvnc", ignore_error=True)
-        with open("/etc/wayvnc/config", "w") as f: f.write("address=127.0.0.1\nenable_auth=false\n")
-        run("sudo systemctl restart wayvnc", ignore_error=True)
-except: pass
+    print("Configuring Wayland VNC (wayvnc)...")
+    run("sudo raspi-config nonint do_vnc 0", ignore_error=True)
+    
+    home_dir = f"/home/{WEB_USER}" if WEB_USER != "root" else "/root"
+    wayvnc_dir = os.path.join(home_dir, ".config", "wayvnc")
+    os.makedirs(wayvnc_dir, exist_ok=True)
+    
+    with open(os.path.join(wayvnc_dir, "config"), "w") as f: 
+        f.write("address=127.0.0.1\nenable_auth=false\n")
+        
+    run(f"chown -R {WEB_USER}:{WEB_USER} {wayvnc_dir}", ignore_error=True)
+    
+    user_uid_proc = subprocess.run(f"id -u {WEB_USER}", shell=True, capture_output=True, text=True)
+    user_uid = user_uid_proc.stdout.strip()
+    
+    if user_uid:
+        run(f"sudo -u {WEB_USER} XDG_RUNTIME_DIR=/run/user/{user_uid} systemctl --user daemon-reload", ignore_error=True)
+        run(f"sudo -u {WEB_USER} XDG_RUNTIME_DIR=/run/user/{user_uid} systemctl --user restart wayvnc", ignore_error=True)
+except Exception as e: 
+    print(f"   [WARNING] WayVNC Setup Error: {e}")
 
-stop_existing_services()
 install_tools()
 dev_id, ssh_port, mac_hex = get_mac_info()
 register_device(dev_id, mac_hex, ssh_port)
@@ -310,15 +354,21 @@ setup_frp(dev_id, ssh_port)
 setup_heartbeat(dev_id)
 create_services()
 
+# --- Summary Output ---
 claim_url = f"{WEB_BASE_URL}/claim/{dev_id}"
 web_app_url = f"https://term-{dev_id}.{SERVER_ADDR}/"
+web_vnc_url = f"https://vnc-{dev_id}.{SERVER_ADDR}/"
 
 print("\n" + "*" * 60)
-print("     INSTALLATION SUCCESSFUL ")
+print("     OFFLINE INSTALLATION SUCCESSFUL ")
 print("*" * 60)
 print(f"Device ID    : {dev_id}")
 print(f"SSH Port     : {ssh_port}")
+print("-" * 20)
 print(f"Web Terminal : {web_app_url}")
+print("-" * 20)
+print(f"Remote VNC   : {web_vnc_url}")
+print("-" * 20)
 print(f"Management   : {claim_url}")
 print("-" * 60)
 print("ACTION REQUIRED: Add device using the link below:")
@@ -326,22 +376,33 @@ print(f"URL: \033[1;33m{claim_url}\033[0m")
 print("-" * 60)
 sys.stdout.flush()
 
+# --- Service Finalization ---
 print("\n" + "="*50)
 print("Services will restart in 3 seconds.")
 try:
-    for i in range(5, 0, -1):
+    for i in range(3, 0, -1):
         print(f"    Finalizing in {i}...", end='\r')
         sys.stdout.flush()
         time.sleep(1)
-except KeyboardInterrupt:
-    print("\n    Skipping delay...")
+except KeyboardInterrupt: pass
 
 print("\nRestarting Services...")
 run("sudo systemctl daemon-reload")
-run("sudo systemctl restart ttyd.service novnc.service frpc.service bosshub-heartbeat.service", ignore_error=True)
+run("sudo systemctl restart ttyd novnc frpc bosshub-heartbeat", ignore_error=True)
 EOF
 
+export BH_SERVER_ADDR="$SERVER_ADDR"
+export BH_SERVER_PORT="$SERVER_PORT"
+export BH_API_URL="$API_URL"
+export BH_PING_URL="$PING_URL"
+export BH_WEB_BASE_URL="$WEB_BASE_URL"
+export BH_AUTH_TOKEN="$AUTH_TOKEN"
 export BH_INSTALL_USER="$WEB_USER"
 export BH_INSTALL_PASS="$WEB_PASS"
+export BH_THEME_BG="$THEME_BG"
+export BH_THEME_FG="$THEME_FG"
+export BH_THEME_CURSOR="$THEME_CURSOR"
+export BH_BASE_DIR="$BH_BASE_DIR"
+
 python3 -u /tmp/setup_logic.py
-rm /tmp/setup_logic.py
+rm -f /tmp/setup_logic.py
