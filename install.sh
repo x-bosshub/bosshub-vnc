@@ -213,6 +213,16 @@ def install_tools():
         print("   [SUCCESS] Copied local noVNC.")
     else:
         print(f"   [ERROR] Missing {novnc_src}. Please check your repository structure.")
+        
+    # --- แทรก Offline Websockify ---
+    websockify_src = os.path.join(BASE_DIR, "websockify")
+    websockify_dest = "/usr/share/novnc/utils/websockify"
+    if os.path.exists(websockify_src):
+        if os.path.exists(websockify_dest): shutil.rmtree(websockify_dest, ignore_errors=True)
+        shutil.copytree(websockify_src, websockify_dest)
+        print("   [SUCCESS] Copied local websockify.")
+    else:
+        print(f"   [INFO] Offline websockify not found in {websockify_src}. System will fallback to APT version.")
 
 def setup_frp(dev_id, ssh_port):
     print("Configuring Tunnel Services...")
@@ -298,13 +308,13 @@ Environment=HOME={home_dir}
 [Install]
 WantedBy=multi-user.target""")
 
-    # เรียกใช้ผ่าน Path มาตรฐานเด็ดขาด /usr/bin/websockify มั่นใจได้ว่ามีไฟล์แน่นอนหลังจากผ่านลอจิกด้านบน
+    # เรียกใช้ผ่าน Offline ถ้ามี หากไม่มีจะใช้ Path มาตรฐาน /usr/bin/websockify
     with open("/etc/systemd/system/novnc.service", "w") as f:
         f.write(f"""[Unit]
 Description=BossHub VNC Remote
 After=network.target
 [Service]
-ExecStart=/usr/bin/websockify --web=/usr/share/novnc 6080 127.0.0.1:5900 --heartbeat=30
+ExecStart=/bin/bash -c 'if [ -f /usr/share/novnc/utils/websockify/run ]; then exec /usr/share/novnc/utils/websockify/run --web=/usr/share/novnc 6080 127.0.0.1:5900 --heartbeat=30; else exec /usr/bin/websockify --web=/usr/share/novnc 6080 127.0.0.1:5900 --heartbeat=30; fi'
 Restart=always
 User=root
 RestartSec=5
