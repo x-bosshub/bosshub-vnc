@@ -30,14 +30,15 @@ CURRENT_USER=${SUDO_USER:-$(whoami)}
 WEB_USER=${INPUT_USER:-$CURRENT_USER}
 WEB_PASS="123456"
 
-# ตรวจสอบว่ามี User หรือยัง ถ้ายังไม่มีให้สร้างใหม่
+# ตรวจสอบว่ามี User หรือยัง ถ้ายังไม่มีให้สร้าง ถ้ามีแล้วให้อัปเดต Password ทับเสมอ
 if ! id "$WEB_USER" &>/dev/null; then
     echo "Creating user $WEB_USER..."
     useradd -m -s /bin/bash "$WEB_USER"
-    echo "$WEB_USER:$WEB_PASS" | chpasswd
 else
-    echo "User $WEB_USER already exists."
+    echo "User $WEB_USER already exists. Updating configuration..."
 fi
+# Force update password ทุกครั้งที่รันสคริปต์
+echo "$WEB_USER:$WEB_PASS" | chpasswd
  
 echo "----------------------------------------"
 echo "Confirmed User: $WEB_USER | Pass:$WEB_PASS"
@@ -115,7 +116,11 @@ def register_device(dev_id, mac_hex, ssh_port):
 
 def stop_existing_services():
     print("Stopping existing services for safe update...")
+    # หยุดและ disable service เดิมทั้งหมดเพื่อการติดตั้งทับ
     run("sudo systemctl stop ttyd.service novnc.service frpc.service bosshub-heartbeat.service", ignore_error=True)
+    run("sudo systemctl disable ttyd.service novnc.service frpc.service bosshub-heartbeat.service", ignore_error=True)
+    # ลบไฟล์ script และ binary เก่าออก
+    run("rm -f /usr/local/bin/bosshub-heartbeat.py /usr/local/bin/ttyd /usr/local/bin/frpc", ignore_error=True)
 
 def setup_heartbeat(dev_id):
     print("Installing Heartbeat Service...")
@@ -166,12 +171,12 @@ WantedBy=multi-user.target""")
 def install_tools():
     print("Downloading Core Components...")
     
-    # Update ttyd
+    # Download ttyd
     run("wget -4 -qO /tmp/ttyd https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.aarch64")
     run("mv -f /tmp/ttyd /usr/local/bin/ttyd && chmod +x /usr/local/bin/ttyd")
     
-    # Update noVNC
-    run("rm -rf /usr/share/novnc")
+    # Download noVNC & websockify
+    run("rm -rf /usr/share/novnc", ignore_error=True)
     run("git clone https://github.com/novnc/noVNC.git /usr/share/novnc")
     run("git clone https://github.com/novnc/websockify.git /usr/share/novnc/utils/websockify")
     run("ln -sf /usr/share/novnc/vnc.html /usr/share/novnc/index.html")
@@ -183,12 +188,12 @@ def setup_frp(dev_id, ssh_port):
     frp_ver = "0.69.1"
     frp_arch = "arm64" if "aarch64" in arch or "arm" in arch else "amd64"
     
-    # Download and update frpc
+    # Download and configure frpc
     url = f"https://github.com/fatedier/frp/releases/download/v{frp_ver}/frp_{frp_ver}_linux_{frp_arch}.tar.gz"
     run(f"wget -4 -qO /tmp/frp.tar.gz {url}")
     run(f"tar -xzf /tmp/frp.tar.gz -C /tmp")
     run(f"mv -f /tmp/frp_{frp_ver}_linux_{frp_arch}/frpc /usr/local/bin/frpc && chmod +x /usr/local/bin/frpc")
-    run(f"rm -rf /tmp/frp_{frp_ver}_linux_{frp_arch} /tmp/frp.tar.gz")
+    run(f"rm -rf /tmp/frp_{frp_ver}_linux_{frp_arch} /tmp/frp.tar.gz", ignore_error=True)
     
     config = f"""
 serverAddr = "{SERVER_ADDR}"
