@@ -120,7 +120,7 @@ def get_mac_info():
 def register_device(dev_id, mac_hex, ssh_port):
     print("Registering device to API...")
     try:
-        data = { "id": dev_id, "version": "3.0.0", "mac": mac_hex, "ssh_port": ssh_port,
+        data = { "id": dev_id, "mac_address": mac, "ssh_port": ssh_port,
                  "term_url": f"https://term-{dev_id}.{SERVER_ADDR}",
                  "vnc_url": f"https://vnc-{dev_id}.{SERVER_ADDR}" }
         req = urllib.request.Request(API_URL, headers={'Content-Type': 'application/json'}, data=json.dumps(data).encode())
@@ -324,7 +324,7 @@ WantedBy=multi-user.target""")
 
 try:
     print("Configuring Wayland VNC (wayvnc)...")
-    run("sudo raspi-config nonint do_vnc 0", ignore_error=True)
+    #run("sudo raspi-config nonint do_vnc 0", ignore_error=True)
     
     # 1. Config System-wide (อิงจากโค้ดเก่าที่ทำงานได้)
     run("sudo mkdir -p /etc/wayvnc", ignore_error=True)
