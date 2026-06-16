@@ -59,7 +59,7 @@ rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock* 2
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get purge -y websockify 2>/dev/null
-apt-get autoremove -y 2>/dev/null
+# apt-get autoremove -y 2>/dev/null
 
 if [ -f /boot/firmware/cmdline.txt ]; then
     if ! grep -q "video=HDMI-A-2" /boot/firmware/cmdline.txt; then
