@@ -4,13 +4,10 @@
 ```
 # เปิดใช้งาน VNC (0 = เปิด, 1 = ปิด)
 # sudo raspi-config nonint do_vnc 0
-
 # เปิดใช้งาน I2C (0 = เปิด, 1 = ปิด)
 # sudo raspi-config nonint do_i2c 0
-
 # เปิดใช้งาน SPI (0 = เปิด, 1 = ปิด)
 # sudo raspi-config nonint do_spi 0
-
 # sudo raspi-config nonint do_boot_behaviour B4
 
 cd ~
@@ -19,7 +16,6 @@ git clone https://github.com/x-bosshub/bosshub-vnc.git ~/bosshub-vnc
 chmod +x ~/bosshub-vnc/install.sh
 sudo bash ~/bosshub-vnc/install.sh
 
-#sudo reboot
 ```
 # ลบการติเตั่ง
 ```
