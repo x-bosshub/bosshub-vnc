@@ -46,8 +46,8 @@ echo "----------------------------------------"
 echo "Initializing System & Cleaning up..."
 
 # Force Kill specific services
-sudo systemctl stop ttyd novnc frpc bosshub-heartbeat wayvnc 2>/dev/null
-killall -9 ttyd frpc websockify 2>/dev/null
+# sudo systemctl stop ttyd novnc frpc bosshub-heartbeat wayvnc 2>/dev/null
+# killall -9 ttyd frpc websockify 2>/dev/null
 
 # Clean APT Locks
 sudo systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null
@@ -386,6 +386,7 @@ except KeyboardInterrupt: pass
 
 print("\nRestarting Services...")
 run("sudo systemctl daemon-reload")
+run("sudo systemctl start ttyd")
 run("sudo systemctl restart ttyd novnc frpc bosshub-heartbeat", ignore_error=True)
 EOF
 
