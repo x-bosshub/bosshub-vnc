@@ -1,4 +1,11 @@
-
+```bash
+   cd /home/pi5
+   git clone https://github.com/x-bosshub/bosshub-vnc.git
+   cd bosshub-vnc
+   
+   chmod +x install.sh
+   sudo ./install.sh
+```
 # Raspberry Pi/ Linux
 ดาวห์โหลดและติดตั้ง
 ```
