@@ -1,8 +1,9 @@
 #!/bin/bash
 # =======================================================
-#  BossHub Installer (v3.0 - Self-Contained / Offline Edition)
+#  BossHub Installer (v3.0.1 - Self-Contained / Offline Edition)
 #  - No external downloads during installation (except apt)
 #  - Copies pre-packaged binaries directly from the repo
+#  - Fixed Websockify Metadata Crash Loop for Debian Trixie
 # =======================================================
 
 SERVER_ADDR="shell.bosshub.io"
@@ -48,11 +49,7 @@ echo "Initializing System & Cleaning up..."
 sudo systemctl stop ttyd novnc frpc bosshub-heartbeat wayvnc 2>/dev/null
 killall -9 ttyd frpc websockify 2>/dev/null
 
-pip3 uninstall -y websockify --break-system-packages 2>/dev/null
-rm -f /usr/local/bin/websockify /home/$WEB_USER/.local/bin/websockify 2>/dev/null
-rm -rf /usr/local/lib/python3.*/dist-packages/websockify* 2>/dev/null
-rm -rf /home/$WEB_USER/.local/lib/python3.*/site-packages/websockify* 2>/dev/null
-
+# Clean APT Locks
 sudo systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null
 killall -9 apt apt-get dpkg 2>/dev/null
 rm -f /var/lib/apt/lists/lock /var/cache/apt/archives/lock /var/lib/dpkg/lock* 2>/dev/null
@@ -69,7 +66,12 @@ fi
 
 echo "Installing System Dependencies (APT)..."
 apt-get update
-apt-get install -y git python3-pip python3-numpy openssh-server wayvnc coreutils websockify novnc
+# Add python3-websockify to ensure core OS files are present
+apt-get install -y git python3-pip python3-numpy openssh-server wayvnc coreutils python3-websockify websockify novnc
+
+# Patch websockify safely without breaking system packages
+echo "Patching Websockify Metadata..."
+pip3 install websockify --break-system-packages --ignore-installed --no-deps
 
 echo "Enabling SSH Service..."
 sudo systemctl enable ssh
@@ -119,7 +121,7 @@ def get_mac_info():
 def register_device(dev_id, mac_hex, ssh_port):
     print("Registering device to API...")
     try:
-        data = { "id": dev_id, "mac_address": mac, "ssh_port": ssh_port,
+        data = { "id": dev_id, "mac_address": mac_hex, "ssh_port": ssh_port,
                  "term_url": f"https://term-{dev_id}.{SERVER_ADDR}",
                  "vnc_url": f"https://vnc-{dev_id}.{SERVER_ADDR}" }
         req = urllib.request.Request(API_URL, headers={'Content-Type': 'application/json'}, data=json.dumps(data).encode())
@@ -301,7 +303,7 @@ WantedBy=multi-user.target""")
 Description=BossHub VNC Remote
 After=network.target
 [Service]
-ExecStart=/bin/bash -c 'if [ -f /usr/share/novnc/utils/websockify/run ]; then exec /usr/share/novnc/utils/websockify/run --web=/usr/share/novnc 6080 127.0.0.1:5900 --heartbeat=30; else exec /usr/bin/websockify --web=/usr/share/novnc 6080 127.0.0.1:5900 --heartbeat=30; fi'
+ExecStart=/usr/bin/websockify --web=/usr/share/novnc 6080 127.0.0.1:5900 --heartbeat=30
 Restart=always
 User=root
 RestartSec=5
