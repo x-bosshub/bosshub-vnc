@@ -48,6 +48,8 @@ echo "Initializing System & Cleaning up..."
 # Force Kill specific services
 # sudo systemctl stop ttyd novnc frpc bosshub-heartbeat wayvnc 2>/dev/null
 # killall -9 ttyd frpc websockify 2>/dev/null
+sudo systemctl stop novnc frpc bosshub-heartbeat wayvnc 2>/dev/null
+killall -9 frpc websockify 2>/dev/null
 
 # Clean APT Locks
 sudo systemctl stop apt-daily.service apt-daily-upgrade.service 2>/dev/null
