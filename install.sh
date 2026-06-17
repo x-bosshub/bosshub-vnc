@@ -323,7 +323,7 @@ WantedBy=multi-user.target""")
 
 try:
     print("Configuring Wayland VNC (wayvnc)...")
-    #run("sudo raspi-config nonint do_vnc 0", ignore_error=True)
+    run("sudo raspi-config nonint do_vnc 0", ignore_error=True)
     
     # 1. Config System-wide (อิงจากโค้ดเก่าที่ทำงานได้)
     run("sudo mkdir -p /etc/wayvnc", ignore_error=True)
