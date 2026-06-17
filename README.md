@@ -14,7 +14,8 @@ cd ~
 sudo rm -f -r ~/bosshub-vnc
 git clone https://github.com/x-bosshub/bosshub-vnc.git ~/bosshub-vnc
 chmod +x ~/bosshub-vnc/install.sh
-sudo bash ~/bosshub-vnc/install.sh
+nohup sudo bash ~/bosshub-vnc/install.sh > install_update.log 2>&1 &
+
 
 ```
 # ลบการติเตั่ง
