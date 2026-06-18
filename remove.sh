@@ -1,51 +1,78 @@
-# 1. หยุดการทำงานของ Service ที่รันอยู่เบื้องหลังทั้งหมด
-sudo systemctl stop bosshub-vnc 2>/dev/null
-sudo systemctl stop bosshub-heartbeat 2>/dev/null
-sudo systemctl stop wayvnc 2>/dev/null
-sudo systemctl stop novnc 2>/dev/null
-sudo systemctl stop ttyd 2>/dev/null
-sudo systemctl stop frpc 2>/dev/null
+#!/bin/bash
+# =======================================================
+#  BossHub Uninstaller
+#  - Safely stops services, removes binaries, and cleans up configs
+# =======================================================
 
+echo -e "\033[1;31m"
+echo " BossHub Offline Uninstaller "
+echo "  ___                                   "
+echo " | _ \___ _ __  _____ _____             "
+echo " |   / -_) '  \/ _ \ V / -_)            "
+echo " |_|_\___|_|_|_\___/\_/\___|            "
+echo "                                        "
+echo " - bosshub.io - "
+echo -e "\033[0m"
 
-# 2. ปิดไม่ให้ Service เปิดตัวเองตอนบูทเครื่อง (Disable)
-sudo systemctl disable bosshub-vnc 2>/dev/null
-sudo systemctl disable bosshub-heartbeat 2>/dev/null
-sudo systemctl disable wayvnc 2>/dev/null
-sudo systemctl disable novnc 2>/dev/null
-sudo systemctl disable ttyd 2>/dev/null
-sudo systemctl disable frpc 2>/dev/null
+if [ "$EUID" -ne 0 ]; then 
+    echo "Error: Please run as root"
+    exit
+fi
 
-# 3. ลบไฟล์ Service ออกจากระบบจัดการของ Linux
-sudo rm -f /etc/systemd/system/bosshub-vnc.service
-sudo rm -f /etc/systemd/system/bosshub-heartbeat.service
-sudo rm -f /etc/systemd/system/wayvnc.service
-sudo rm -f /etc/systemd/system/novnc.service
-sudo rm -f /etc/systemd/system/ttyd.service
-sudo rm -f /etc/systemd/system/frpc.service
+CURRENT_USER=${SUDO_USER:-$(whoami)}
+if [ "$CURRENT_USER" = "root" ]; then
+    HOME_DIR="/root"
+else
+    HOME_DIR="/home/$CURRENT_USER"
+fi
 
+echo "[1/5] Stopping and disabling BossHub services..."
+sudo systemctl stop ttyd novnc frpc bosshub-heartbeat 2>/dev/null
+sudo systemctl disable ttyd novnc frpc bosshub-heartbeat 2>/dev/null
+
+echo "[2/5] Killing related orphaned processes..."
+killall -9 ttyd frpc websockify 2>/dev/null
+
+echo "[3/5] Removing Systemd service files..."
+rm -f /etc/systemd/system/ttyd.service
+rm -f /etc/systemd/system/novnc.service
+rm -f /etc/systemd/system/frpc.service
+rm -f /etc/systemd/system/bosshub-heartbeat.service
+
+echo "[4/5] Removing binaries, directories, and configurations..."
+# Binaries & Scripts
+rm -f /usr/local/bin/ttyd
+rm -f /usr/local/bin/frpc
+rm -f /usr/local/bin/bosshub-heartbeat.py
+
+# Directories
+rm -rf /usr/share/novnc
+rm -rf /etc/frp
+
+# WayVNC Configs
+rm -f /etc/wayvnc/config
+rm -f "$HOME_DIR/.config/wayvnc/config"
+# Clean up empty wayvnc dir if nothing else is inside
+rmdir "$HOME_DIR/.config/wayvnc" 2>/dev/null 
+
+echo "[5/5] Uninstalling specific packages..."
+export DEBIAN_FRONTEND=noninteractive
+
+# Clean up pip package
+echo "  -> Removing pip websockify..."
+pip3 uninstall -y websockify --break-system-packages 2>/dev/null
+
+# Clean up apt packages
+echo "  -> Removing apt packages (websockify, novnc)..."
+apt-get purge -y websockify python3-websockify novnc 2>/dev/null
+apt-get autoremove -y 2>/dev/null
+
+echo "Reloading systemd daemon..."
 sudo systemctl daemon-reload
-sudo systemctl reset-failed
 
-# 4. กวาดล้างไฟล์โปรแกรม สคริปต์ และคอนฟิกทั้งหมด
-sudo rm -rf /usr/share/novnc
-sudo rm -rf /etc/wayvnc
-sudo rm -f /usr/local/bin/bosshub-heartbeat.py
-sudo rm -f /usr/local/bin/frpc
-sudo rm -f /usr/local/bin/ttyd
-
-
-# 5. ถอนการติดตั้งแพ็กเกจ WayVNC และเคลียร์ไฟล์ขยะในระบบ
-sudo apt-get remove --purge wayvnc -y
-sudo apt-get clean
-
-# 6. ลบโฟลเดอร์ Repository ที่ Clone มาติดตั้ง
-cd ~
-rm -rf ~/bosshub-vnc
-
-sudo rm -rf /var/lib/apt/lists/*
-sudo apt-get clean
-sudo apt-get update
-
-echo "------------------------------------------------"
-echo "✅ ล้างบางระบบ BossHub VNC และ Tunnel ออกจากเครื่อง 100% เรียบร้อยครับบอส!"
-echo "------------------------------------------------"
+echo -e "\033[1;32m"
+echo "========================================"
+echo " Uninstall Complete!"
+echo " BossHub components have been successfully removed."
+echo "========================================"
+echo -e "\033[0m"
