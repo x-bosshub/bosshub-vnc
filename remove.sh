@@ -1,7 +1,8 @@
 #!/bin/bash
 # =======================================================
-#  BossHub Uninstaller
+#  BossHub Uninstaller (v3.0.1)
 #  - Safely stops services, removes binaries, and cleans up configs
+#  - Fixed WayVNC directory removal and removed autoremove
 # =======================================================
 
 echo -e "\033[1;31m"
@@ -16,7 +17,7 @@ echo -e "\033[0m"
 
 if [ "$EUID" -ne 0 ]; then 
     echo "Error: Please run as root"
-    exit
+    exit 1
 fi
 
 CURRENT_USER=${SUDO_USER:-$(whoami)}
@@ -31,7 +32,7 @@ sudo systemctl stop ttyd novnc frpc bosshub-heartbeat 2>/dev/null
 sudo systemctl disable ttyd novnc frpc bosshub-heartbeat 2>/dev/null
 
 echo "[2/5] Killing related orphaned processes..."
-killall -9 ttyd frpc websockify 2>/dev/null
+sudo killall -9 ttyd frpc websockify 2>/dev/null
 
 echo "[3/5] Removing Systemd service files..."
 sudo rm -f /etc/systemd/system/ttyd.service
@@ -51,9 +52,7 @@ sudo rm -rf /etc/frp
 
 # WayVNC Configs
 sudo rm -f /etc/wayvnc/config
-sudo rm -f "$HOME_DIR/.config/wayvnc/config"
-# Clean up empty wayvnc dir if nothing else is inside
-sudo rmdir "$HOME_DIR/.config/wayvnc" 2>/dev/null 
+sudo rm -rf "$HOME_DIR/.config/wayvnc"
 
 echo "[5/5] Uninstalling specific packages..."
 export DEBIAN_FRONTEND=noninteractive
@@ -65,7 +64,6 @@ pip3 uninstall -y websockify --break-system-packages 2>/dev/null
 # Clean up apt packages
 echo "  -> Removing apt packages (websockify, novnc)..."
 apt-get purge -y websockify python3-websockify novnc 2>/dev/null
-# apt-get autoremove -y 2>/dev/null
 
 echo "Reloading systemd daemon..."
 sudo systemctl daemon-reload
