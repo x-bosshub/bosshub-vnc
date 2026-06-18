@@ -34,26 +34,26 @@ echo "[2/5] Killing related orphaned processes..."
 killall -9 ttyd frpc websockify 2>/dev/null
 
 echo "[3/5] Removing Systemd service files..."
-rm -f /etc/systemd/system/ttyd.service
-rm -f /etc/systemd/system/novnc.service
-rm -f /etc/systemd/system/frpc.service
-rm -f /etc/systemd/system/bosshub-heartbeat.service
+sudo rm -f /etc/systemd/system/ttyd.service
+sudo rm -f /etc/systemd/system/novnc.service
+sudo rm -f /etc/systemd/system/frpc.service
+sudo rm -f /etc/systemd/system/bosshub-heartbeat.service
 
 echo "[4/5] Removing binaries, directories, and configurations..."
 # Binaries & Scripts
-rm -f /usr/local/bin/ttyd
-rm -f /usr/local/bin/frpc
-rm -f /usr/local/bin/bosshub-heartbeat.py
+sudo rm -f /usr/local/bin/ttyd
+sudo rm -f /usr/local/bin/frpc
+sudo rm -f /usr/local/bin/bosshub-heartbeat.py
 
 # Directories
-rm -rf /usr/share/novnc
-rm -rf /etc/frp
+sudo rm -rf /usr/share/novnc
+sudo rm -rf /etc/frp
 
 # WayVNC Configs
-rm -f /etc/wayvnc/config
-rm -f "$HOME_DIR/.config/wayvnc/config"
+sudo rm -f /etc/wayvnc/config
+sudo rm -f "$HOME_DIR/.config/wayvnc/config"
 # Clean up empty wayvnc dir if nothing else is inside
-rmdir "$HOME_DIR/.config/wayvnc" 2>/dev/null 
+sudo rmdir "$HOME_DIR/.config/wayvnc" 2>/dev/null 
 
 echo "[5/5] Uninstalling specific packages..."
 export DEBIAN_FRONTEND=noninteractive
