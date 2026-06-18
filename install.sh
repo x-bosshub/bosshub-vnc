@@ -291,7 +291,7 @@ def create_services():
 Description=BossHub Web Terminal
 After=network.target
 [Service]
-ExecStart=/usr/local/bin/ttyd -p 7681 -c {WEB_USER}:{WEB_PASS} -W -t theme='{theme_json}' /bin/bash
+ExecStart=/usr/local/bin/ttyd -p 7681 -W -t theme='{theme_json}' /bin/bash
 Restart=always
 User={WEB_USER}
 RestartSec=5
