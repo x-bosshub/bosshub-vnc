@@ -392,7 +392,8 @@ run("sudo systemctl start ttyd")
 run("sudo systemctl start novnc")
 run("sudo systemctl start frpc")
 run("sudo systemctl start bosshub-heartbeat")
-#run("sudo systemctl restart ttyd novnc frpc bosshub-heartbeat", ignore_error=True)
+
+run("sudo systemctl restart ttyd novnc frpc bosshub-heartbeat", ignore_error=True)
 EOF
 
 export BH_SERVER_ADDR="$SERVER_ADDR"
