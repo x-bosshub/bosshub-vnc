@@ -65,7 +65,7 @@ pip3 uninstall -y websockify --break-system-packages 2>/dev/null
 # Clean up apt packages
 echo "  -> Removing apt packages (websockify, novnc)..."
 apt-get purge -y websockify python3-websockify novnc 2>/dev/null
-apt-get autoremove -y 2>/dev/null
+# apt-get autoremove -y 2>/dev/null
 
 echo "Reloading systemd daemon..."
 sudo systemctl daemon-reload
