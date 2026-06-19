@@ -1,4 +1,4 @@
-ex```bash
+```bash
    cd /home/pi5
    git clone https://github.com/x-bosshub/bosshub-vnc.git
    cd bosshub-vnc
