@@ -1,10 +1,19 @@
-```bash
+ex```bash
    cd /home/pi5
    git clone https://github.com/x-bosshub/bosshub-vnc.git
    cd bosshub-vnc
    
    chmod +x install.sh
    sudo ./install.sh
+```
+# ติดตั้ง เฉพาะ Term 64Bit
+```
+curl -sL https://raw.githubusercontent.com/x-bosshub/bosshub-vnc/refs/heads/main/install_term.sh | sudo bash
+```
+
+# ติดตั้ง Term 32Bit
+```
+curl -sL https://raw.githubusercontent.com/x-bosshub/bosshub-vnc/refs/heads/main/install_32bit.sh | sudo bash
 ```
 # Raspberry Pi/ Linux
 ดาวห์โหลดและติดตั้ง
