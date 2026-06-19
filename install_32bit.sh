@@ -40,7 +40,7 @@ CURRENT_USER=${SUDO_USER:-$(whoami)}
 
 # Enforce minimum 4 characters for security and database standards
 if [ ${#CURRENT_USER} -lt 4 ]; then
-    WEB_USER="boss" 
+    WEB_USER="pi5" 
 else
     WEB_USER=$CURRENT_USER
 fi
