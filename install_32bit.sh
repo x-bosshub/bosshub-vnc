@@ -28,6 +28,7 @@ echo "\_____/\___/|___/___/_| |_|\__,_|_.__/  "
 echo " - bosshub.io - "
 echo -e "\033[0m"
 
+
 if [ "$EUID" -ne 0 ]; then echo "Error: Please run as root"; exit; fi
 
 export BH_BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
