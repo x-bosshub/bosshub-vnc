@@ -1,4 +1,4 @@
-# ติดตั้งใน บน Raspberry Pi5
+# วิธีที่ 1 ติดตั้งใน บน Raspberry Pi5 (ผ่านหน้าจอ)
 ```bash
 cd /home/pi5
 git clone https://github.com/x-bosshub/bosshub-vnc.git
