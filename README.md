@@ -8,7 +8,7 @@ chmod +x install.sh
 sudo ./install.sh
 
 ```
-# 2 ติดตั้งแบบ Remote TERM 
+# วิธีที่ 2 ติดตั้งแบบ Remote Terminal (เพื่ออัพเดท) 
 ```bash
 cd /home/pi5
 sudo rm -rf ~/bosshub-vnc
