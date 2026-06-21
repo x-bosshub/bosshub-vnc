@@ -1,11 +1,24 @@
 # ติดตั้งใน บน Raspberry Pi5
 ```bash
-   cd /home/pi5
-   git clone https://github.com/x-bosshub/bosshub-vnc.git
-   cd bosshub-vnc
-   
-   chmod +x install.sh
-   sudo ./install.sh
+cd /home/pi5
+git clone https://github.com/x-bosshub/bosshub-vnc.git
+cd bosshub-vnc
+
+chmod +x install.sh
+sudo ./install.sh
+
+```
+# 2 ติดตั้งแบบ Remote TERM 
+```bash
+cd /home/pi5
+sudo rm -rf ~/bosshub-vnc
+
+git clone https://github.com/x-bosshub/bosshub-vnc.git
+cd bosshub-vnc
+
+chmod +x install.sh
+nohup sudo ./install.sh > install_log.txt 2>&1 &
+
 ```
 # ติดตั้ง เฉพาะ Term 64Bit
 ```
