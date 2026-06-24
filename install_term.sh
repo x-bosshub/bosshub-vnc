@@ -94,7 +94,7 @@ def get_raspberry_pi_serial_number():
         with open('/sys/firmware/devicetree/base/serial-number', 'r') as f:
             serial_number = f.read().strip()
             return serial_number.replace(chr(0),'') 
-    except :
+    except:
         return str(uuid.uuid4())
 
 def get_mac_info():
@@ -118,18 +118,11 @@ def register_device(dev_id, mac_hex, ssh_port):
 def setup_heartbeat(dev_id):
     print("Installing Heartbeat Service...")
     script = f"""
-import time, json, urllib.request, subprocess, os ,uuid
-
-def get_serial_number():
-    try:
-        with open('/sys/firmware/devicetree/base/serial-number', 'r') as f:
-            serial_number = f.read().strip()
-            return str(serial_number.replace(chr(0),''))
-    except :
-        return str(uuid.uuid4())
+import time, json, urllib.request, subprocess, os
 
 PING_URL = "{PING_URL}"
-DEV_ID = get_serial_number()
+DEV_ID = "{dev_id}"
+
 def get_info():
     try: t = round(int(open('/sys/class/thermal/thermal_zone0/temp').read())/1000,1)
     except: t=0
@@ -146,6 +139,7 @@ def get_info():
     try: mod = open('/sys/firmware/devicetree/base/model').read().replace(chr(0),'').strip()
     except: mod="LINUX/RPI"
     return t, ram, disk, up, mod
+
 while True:
     try:
         t, r, d, u, m = get_info()
@@ -179,7 +173,8 @@ def install_tools():
         os.chmod(ttyd_dest, 0o755)
         print("   [SUCCESS] Copied local ttyd.")
     else:
-        print(f"   [ERROR] Missing {ttyd_src}.")
+        print(f"   [ERROR] Missing {ttyd_src}. Halting installation.")
+        sys.exit(1)
 
 def setup_frp(dev_id, ssh_port):
     print("Configuring Tunnel Services...")
@@ -192,7 +187,8 @@ def setup_frp(dev_id, ssh_port):
         os.chmod(frpc_dest, 0o755)
         print("   [SUCCESS] Copied local frpc.")
     else:
-        print(f"   [ERROR] Missing {frpc_src}.")
+        print(f"   [ERROR] Missing {frpc_src}. Halting installation.")
+        sys.exit(1)
     
     config = f"""
 serverAddr = "{SERVER_ADDR}"
@@ -241,15 +237,22 @@ customDomains = ["app-{dev_id}.{SERVER_ADDR}"]
 
 def create_services():
     print("Integrating Systemd Services...")
-    theme_json = f'{{"background": "{THEME_BG}", "foreground": "{THEME_FG}", "cursor": "{THEME_CURSOR}"}}'
     home_dir = f"/home/{WEB_USER}" if WEB_USER != "root" else "/root"
+    
+    # Create a wrapper script for ttyd to safely handle JSON quotes in systemd
+    ttyd_script = f"""#!/bin/bash
+exec /usr/local/bin/ttyd -p 7681 -c {WEB_USER}:{WEB_PASS} -W -t theme='{{ "background": "{THEME_BG}", "foreground": "{THEME_FG}", "cursor": "{THEME_CURSOR}" }}' /bin/bash
+"""
+    with open("/usr/local/bin/start-ttyd.sh", "w") as f:
+        f.write(ttyd_script)
+    os.chmod("/usr/local/bin/start-ttyd.sh", 0o755)
     
     with open("/etc/systemd/system/ttyd.service", "w") as f:
         f.write(f"""[Unit]
 Description=BossHub Web Terminal
 After=network.target
 [Service]
-ExecStart=/usr/local/bin/ttyd -p 7681 -c {WEB_USER}:{WEB_PASS} -W -t theme='{theme_json}' /bin/bash
+ExecStart=/usr/local/bin/start-ttyd.sh
 Restart=always
 User={WEB_USER}
 RestartSec=5
@@ -279,25 +282,23 @@ setup_heartbeat(dev_id)
 create_services()
 
 claim_url = f"{WEB_BASE_URL}/claim/{dev_id}"
-web_app_url = f"https://term-{dev_id}.{SERVER_ADDR}/"
-
+web_term_url = f"https://term-{dev_id}.{SERVER_ADDR}/"
 web_web_url = f"https://web-{dev_id}.{SERVER_ADDR}/"
-
-web_sock_url = f"https://app-{dev_id}.{SERVER_ADDR}/"
+web_sock_url = f"https://socket-{dev_id}.{SERVER_ADDR}/"
+web_app_url = f"https://app-{dev_id}.{SERVER_ADDR}/"
 
 print("\n" + "*" * 60)
 print("     OFFLINE INSTALLATION SUCCESSFUL ")
 print("*" * 60)
-print(f"Device ID    : {dev_id}")
-print(f"SSH Port     : {ssh_port}")
-print("-" * 20)
-print(f"Web Terminal : {web_app_url}")
-print("-" * 20)
-print(f"Web Port 8000 : {web_web_url}")
-print("-" * 20)
-print(f"Web Port 9000 : {web_sock_url}")
-print("-" * 20)
-print(f"Management   : {claim_url}")
+print(f"Device ID           : {dev_id}")
+print(f"SSH Port            : {ssh_port}")
+print("-" * 60)
+print(f"Web Terminal (7681) : {web_term_url}")
+print(f"Web App (5000)      : {web_web_url}")
+print(f"Socket (8000)       : {web_sock_url}")
+print(f"App (9000)          : {web_app_url}")
+print("-" * 60)
+print(f"Management          : {claim_url}")
 print("-" * 60)
 print("ACTION REQUIRED: Add device using the link below:")
 print(f"URL: \033[1;33m{claim_url}\033[0m")
